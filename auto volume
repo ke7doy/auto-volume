@@ -1,0 +1,76 @@
+import xbmc
+import xbmcgui
+import xbmcaddon
+import urllib.request
+import json
+
+addon_id = "plugin.video.voicevolume"
+addon = xbmcaddon.Addon(addon_id)
+
+# Get the Google Voice API key
+api_key = addon.getSetting("api_key")
+
+# Get the IR blaster device
+device = addon.getSetting("device")
+
+# Get the volume range
+volume_range = addon.getSetting("volume_range")
+
+# Create a function to send an IR command
+def send_ir_command(command):
+    # Create an HTTP request
+    req = urllib.request.Request("https://www.google.com/cloud/iot/v1/projects/{}/devices/{}/commands".format(addon.getSetting("project_id"), device))
+
+    # Set the request headers
+    req.headers["Authorization"] = "Bearer {}".format(api_key)
+    req.headers["Content-Type"] = "application/json"
+
+    # Send the request
+    response = urllib.request.urlopen(req)
+
+    # Check the response status code
+    if response.status_code == 200:
+        # The command was sent successfully
+        return True
+    else:
+        # The command was not sent successfully
+        return False
+
+# Create a function to get the current audio level
+def get_audio_level():
+    # Get the audio output device
+    device = xbmc.AudioDevice.get_default()
+
+    # Get the audio volume
+    volume = device.volume
+
+    # Return the audio level
+    return volume / volume_range
+
+# Create a function to adjust the volume based on the audio level
+def adjust_volume(audio_level):
+    # Get the desired volume
+    desired_volume = audio_level * volume_range
+
+    # Send an IR command to set the volume
+    send_ir_command("volume={}".format(desired_volume))
+
+# Create a Kodi event handler
+def on_audio_change(audio_level):
+    # Get the nominal volume
+    nominal_volume = addon.getSetting("nominal_volume")
+
+    # Get the 10% range
+    ten_percent_range = volume_range / 10
+
+    # Adjust the volume to the nominal volume
+    if audio_level > nominal_volume + ten_percent_range:
+        adjust_volume(nominal_volume + ten_percent_range)
+    elif audio_level < nominal_volume - ten_percent_range:
+        adjust_volume(nominal_volume - ten_percent_range)
+
+# Register the Kodi event handler
+xbmc.event.register("on_audio_change", on_audio_change)
+
+# Start the add-on
+xbmc.executebuiltin("RunAddon({})".format(addon_id))
